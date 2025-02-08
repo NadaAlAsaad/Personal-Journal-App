@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Personal Journal</title>
+  <style>
+    body {
+      font-family: 'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', Arial, sans-serif;
+      background: #fbe8f0;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 800px;
+      margin: auto;
+      background: #fff;
+      padding: 20px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      text-align: center;
+      color: #d04d9e;
+    }
+    form {
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 20px;
+    }
+    textarea {
+      resize: vertical;
+      min-height: 100px;
+      padding: 10px;
+      font-size: 16px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      padding: 5px 10px;
+      font-size: 14px;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      border-radius: 4px;
+      margin: 5px;
+      width: 120px;
+      transition: background 0.3s ease;
+    }
+    .primary-btn {
+      background: #d04d9e;
+    }
+    .primary-btn:hover {
+      background: #ba3f7d;
+    }
+    .danger-btn {
+      background: #f26d76;
+    }
+    .danger-btn:hover {
+      background: #e15a63;
+    }
+    .entry {
+      border: 1px solid #ddd;
+      padding: 15px;
+      margin-bottom: 15px;
+      border-radius: 4px;
+      background: #fafafa;
+      position: relative;
+    }
+    .entry h3 {
+      margin-top: 0;
+    }
+    .meta {
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+    .entry-actions {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+    }
+
+    @media (max-width: 768px) {
+      body {
+        padding: 10px;
+      }
+
+      .container {
+        padding: 15px;
+      }
+
+      h1 {
+        font-size: 24px;
+      }
+
+      textarea {
+        font-size: 14px;
+      }
+
+      button {
+        font-size: 12px;
+        width: 100%;
+        padding: 8px;
+      }
+
+      .entry {
+        padding: 10px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      h1 {
+        font-size: 20px;
+      }
+
+      textarea {
+        font-size: 14px;
+        min-height: 80px;
+      }
+
+      button {
+        font-size: 12px;
+        width: 100%;
+        padding: 8px;
+      }
+
+      .entry {
+        padding: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>My Personal Journal</h1>
+    <form id="journalForm">
+      <textarea id="entryText" placeholder="Write your journal entry here..." required></textarea>
+      <button type="submit" class="primary-btn">Save Entry</button>
+    </form>
+    <div id="entriesContainer"></div>
+  </div>
+
+  <script>
+    let entries = [];
+    let editingId = null;
+
+    window.addEventListener('load', () => {
+      const storedEntries = localStorage.getItem('journalEntries');
+      if (storedEntries) entries = JSON.parse(storedEntries);
+      displayEntries();
+    });
+
+    async function analyzeMood(text) {
+      try {
+        const response = await fetch('https://sentim-api.herokuapp.com/api/v1/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({ text })
+        });
+        const data = await response.json();
+        return data.result.type;
+      } catch (error) {
+        console.error('Error analyzing mood:', error);
+        return 'unknown';
+      }
+    }
+
+    document.getElementById('journalForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const textArea = document.getElementById('entryText');
+      const text = textArea.value.trim();
+      if (!text) return;
+
+      const moodResult = await analyzeMood(text);
+
+      if (editingId !== null) {
+        const entry = entries.find(entry => entry.id === editingId);
+        entry.text = text;
+        entry.timestamp = new Date().toLocaleString();
+        entry.mood = moodResult;
+      } else {
+        entries.unshift({
+          id: Date.now(),
+          text,
+          timestamp: new Date().toLocaleString(),
+          mood: moodResult
+        });
+      }
+
+      saveEntries();
+      displayEntries();
+      textArea.value = '';
+      editingId = null;
+      this.querySelector('button').textContent = 'Save Entry';
+    });
+
+    function deleteEntry(id) {
+      entries = entries.filter(entry => entry.id !== id);
+      saveEntries();
+      displayEntries();
+    }
+
+    function editEntry(id) {
+      const entry = entries.find(entry => entry.id === id);
+      document.getElementById('entryText').value = entry.text;
+      editingId = id;
+      document.querySelector('#journalForm button').textContent = 'Update Entry';
+    }
+
+    function saveEntries() {
+      localStorage.setItem('journalEntries', JSON.stringify(entries));
+    }
+
+    function displayEntries() {
+      const container = document.getElementById('entriesContainer');
+      container.innerHTML = entries.length === 0 ? '<p>No entries yet.</p>' : '';
+      
+      entries.forEach(entry => {
+        const entryDiv = document.createElement('div');
+        entryDiv.className = 'entry';
+        entryDiv.innerHTML = `
+          <div class="entry-actions">
+            <button class="primary-btn" onclick="editEntry(${entry.id})">Edit</button>
+            <button class="danger-btn" onclick="deleteEntry(${entry.id})">Delete</button>
+          </div>
+          <div class="meta">${entry.timestamp}</div>
+          <p>${entry.text}</p>
+          <p><strong>Mood:</strong> ${entry.mood ? entry.mood : 'Not analyzed'}</p>
+        `;
+        container.appendChild(entryDiv);
+      });
+    }
+  </script>
+</body>
+</html>
